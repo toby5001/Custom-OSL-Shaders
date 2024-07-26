@@ -1,0 +1,49 @@
+// A basic fbm noise which wraps around the basic OSL noise function
+// adl_fbm_basic.osl, by Andrew Louda
+// Modified: 2022-12-31
+// Copyright 2022 Andrew Louda. This file is licensed under the Apache 2.0 license.
+// SPDX-License-Identifier: Apache-2.0
+
+// TODO: Lerp between octave values so that it can be varied smoothly
+
+float fbm(vector coords, int ioctaves, float lacunarity, float gain, float noisetime) {
+    // Initial values
+    vector pos = coords;
+    float value = 0.0;
+    float amplitude = .5;
+    float frequency = 1.;
+    //
+    // Loop of octaves
+    for (int i = 0; i < ioctaves; i++) {
+        value += amplitude * (noise("perlin", pos, noisetime));
+        pos *= lacunarity;
+        amplitude *= gain;
+    }
+    return value;
+}
+
+shader adl_basic_fbm(
+    vector pdat = P,
+    float octaves = 4
+        [[float min = 1, float max = 10]],
+    float lacunarity = 2.1
+        [[float min = 0, float max = 10]],
+//might not be in use any more, consider removal
+    float noisetime = 0
+        [[float min = 0, float max = 10]],
+    float gain = 0.5
+        [[float min = 0, float max = 1]],
+    float uni_scale = 1
+        [[float min = 0, float max = 10]],
+    vector scale = 1,
+    vector offset = 0,
+    output float fout = 0,
+)
+{
+    vector pdat_trans = transform("object", P);
+    fout = fbm((pdat_trans)*(1/scale)*(1/uni_scale)*10+offset, int(round(octaves)), lacunarity, gain, noisetime);
+
+    fout = 0.5 * fout + 0.5;
+    //fout = pow(fout, 1);
+
+}

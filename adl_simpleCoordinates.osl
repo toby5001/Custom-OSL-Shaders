@@ -1,0 +1,17 @@
+// Outputs position coordinates in a defined tramsformation space
+// adl_simpleCoordinates.osl, by Andrew Louda
+// Modified: 2024-04-18
+// Copyright 2024 Andrew Louda. This file is licensed under the Apache 2.0 license.
+// SPDX-License-Identifier: Apache-2.0
+
+shader adl_simple_coordinates(
+    point coordinates = P,
+    string fromSpace = "common"
+        [[ string widget = "popup", string options = "common|object|shader|world|camera|screen|raster|NDC" ]],
+    string toSpace = "common"
+        [[ string widget = "popup", string options = "common|object|shader|world|camera|screen|raster|NDC" ]],
+    output point transformed_coordinates = 0,
+)
+{
+    transformed_coordinates = transform(fromSpace,toSpace,coordinates);
+}

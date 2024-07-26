@@ -1,0 +1,43 @@
+// An OSL implementation of Oklab color mixing
+// adl_oklab_mix.osl, adapted by Andrew Louda for OSL, originally by Inigo Quilez (https://www.shadertoy.com/view/ttcyRS)
+// Modified: 2023-10-24
+// Copyright 2023 Andrew Louda. This file is licensed under the Apache 2.0 license.
+// SPDX-License-Identifier: Apache-2.0
+
+// This is an improvement to standard color mixing, which lerps between rgb components, with no respect to perceptual brightness or saturation
+
+vector oklab_mix( vector colA, vector colB, float h )
+{
+    // https://bottosson.github.io/posts/oklab
+    matrix kCONEtoLMS = matrix(                
+         0.4121656120,  0.2118591070,  0.0883097947, 0,
+         0.5362752080,  0.6807189584,  0.2818474174, 0,
+         0.0514575653,  0.1074065790,  0.6302613616, 0,
+         1, 1, 1, 0);
+    matrix kLMStoCONE = matrix(
+         4.0767245293, -1.2681437731, -0.0041119885, 0,
+        -3.3072168827,  2.6093323231, -0.7034763098, 0,
+         0.2307590544, -0.3411344290,  1.7068625689, 0,
+         1, 1, 1, 0);
+                    
+    // rgb to cone (arg of pow can't be negative)
+    vector lmsA = pow( transform(kCONEtoLMS,colA), vector(1.0/3.0) );
+    vector lmsB = pow( transform(kCONEtoLMS,colB), vector(1.0/3.0) );
+    // lerp
+    vector lms = mix( lmsA, lmsB, h );
+    // gain in the middle (no oaklab anymore, but looks better?)
+    //lms *= 1.0+0.2*h*(1.0-h);
+    // cone to rgb
+    return transform(kLMStoCONE,lms*lms*lms);
+}
+
+shader colmix(
+    color colorA = 0,
+    color colorB = 0,
+    float mixamt = 0.5
+        [[float min = 0, float max = 1]],
+    output color colorMixed = 0
+)
+{
+    colorMixed = oklab_mix(colorA, colorB, mixamt);
+}

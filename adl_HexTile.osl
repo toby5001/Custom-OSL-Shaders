@@ -1,0 +1,152 @@
+// An OSL implementation of Hex-Tiling, as shown by Mikkelsen in "Practical Real-Time Hex-Tiling"
+// adl_HexTile.osl, by Andrew Louda
+// Modified: 2023-02-10
+// Copyright 2023 Andrew Louda. This file is licensed under the Apache 2.0 license.
+// SPDX-License-Identifier: Apache-2.0
+
+// Special care needs to be taken with Hex-Tiling normal maps which is currently not possible in OSL (more specifically in Redshift's version). Details are in the appropriate section.
+
+#define sqrt_3x2 3.46410161514
+
+//Applies the 4 components of a 2x2 matrix to a vector, passing through the z component
+vector apply2Dm( float a, float b, float c, float d, vector val){
+    return vector( a*val.x + b*val.y, c*val.x + d*val.y, val.z);
+}
+
+// Produce an arbitrary offset from a hex tile center
+vector custom_hash( vector in_vertex){
+    vector shift_val = sin( apply2Dm( 127.1, 311.7, 269.5, 183.3, in_vertex)) * 43758.5453;
+    vector valfloor = floor( shift_val);
+    return (shift_val - valfloor);
+}
+
+// Remap an integer hex tile center to st space.
+vector make_cen( vector in_vertex){
+    vector step1 = apply2Dm( 1.0, 0.5, 0.0, 0.86602505756, in_vertex);
+    return step1 / sqrt_3x2;
+}
+
+// This differs from the paper's implementation in that it relies on OSL's inbuilt rotate() function,
+// instead of creating and applying a transformation matrix. This value is passed to rotate() later on.
+float rotamp( vector idx, float rad){
+    float angle = abs(idx.x*idx.y) + abs(idx.x+idx.y) + M_PI;
+
+    // Remap to +/-pi
+    angle = fmod(angle, M_2PI);
+    if(angle<0) angle += 2*M_PI;
+    if(angle>M_PI) angle -= M_2PI;
+
+    return angle * rad;
+}
+
+// Apply an S-curve–shaped ramp to the signal and normalize the weights.
+vector Gain3(vector x, float r){
+    // Increase contrast when r > 0.5 and
+    // reduce contrast if less.
+    float k = log(1-r) / log(0.5);
+    vector s = 2*step(0.5, x);
+    vector m = 2*(1 - s);
+    vector res = 0.5*s + 0.25*m * pow(max(0.0, s + x*m), k);
+    return res / (res.x+res.y+res.z);
+}
+
+// Swizzle the weights to produce a consistent hex color for visualization purposes.
+vector ProduceHexWeights(vector W, vector vertex1, vector vertex2, vector vertex3){
+    vector res = 0.0;
+    int v1 = int(vertex1.x-vertex1.y)%3;
+    if(v1<0) v1+=3;
+    int vh = v1<2 ? (v1+1) : 0;
+    int vl = v1>0 ? (v1-1) : 2;
+    int v2 = vertex1.x<vertex3.x ? vl : vh;
+    int v3 = vertex1.x<vertex3.x ? vh : vl;
+    res.x = v3==0 ? W.z : (v2==0 ? W.y : W.x);
+    res.y = v3==1 ? W.z : (v2==1 ? W.y : W.x);
+    res.z = v3==2 ? W.z : (v2==2 ? W.y : W.x);
+    return res;
+}
+
+shader adl_hextile(
+    vector uvcoords = vector(u,v,0),
+    string texpath = "" 
+        [[string widget = "filename"]],
+    int is_normal = 0
+        [[int min = 0, int max = 1, string widget = "boolean"]],
+    float tex_scale_uni = 1
+        [[float min = 1, float max = 16]],
+    vector tex_scale = 1,
+    vector tex_offset = 0,
+    float tex_rotate = 0
+        [[float min = 0, float max = 360]],
+    float rotStrength = 0
+        [[float min = 0, float max = 180]],
+    float rcurve = 0.6
+        [[float min = 0.5, float max = 0.95]],    
+    output color colout = 0,
+    output color weightout = 0,
+)
+{
+    float radStrength = radians(rotStrength);
+
+    // Modification of input coordinates
+    vector st = vector(uvcoords[0], uvcoords[1],0) * tex_scale_uni * tex_scale;
+    st[0] += tex_offset[0], st[1] += tex_offset[1];
+    if(tex_rotate !=0) st = rotate(st, radians(tex_rotate), {0,0,1});
+    
+    //TriangleGrid
+    vector skew_st = st*sqrt_3x2;
+    skew_st = apply2Dm( 1.0, -0.57735027, 0.0, 1.15470054, skew_st);
+    vector baseId = floor(skew_st);
+    vector tempval = skew_st - baseId;
+    tempval[2] = 1.0 - tempval[0] - tempval[1];
+    
+    float s = step(0.0, -tempval[2]);
+    float s2 = 2*s-1;
+    
+    // Hex tile weights
+    float w1 = -tempval[2]*s2;
+    float w2 = s - tempval[1]*s2;
+    float w3 = s - tempval[0]*s2;
+    
+    // Integer centers
+    vector vertex1 = baseId + vector(s,s,0);
+    vector vertex2 = baseId + vector(s,1-s,0); 
+    vector vertex3 = baseId + vector(1-s,s,0);
+    
+    // Hex tile sampling
+
+    //vector dSTdx = Dx(st), dSTdy = Dy(st);
+
+    // Rotate each individual hex tile around it's center
+    float rot1 = rotamp(vertex1, radStrength), rot2 = rotamp(vertex2, radStrength), rot3 = rotamp(vertex3, radStrength);
+    vector cen1 = make_cen(vertex1), cen2 = make_cen(vertex2), cen3 = make_cen(vertex3);
+    vector st1 = rotate(st-cen1, rot1, {0,0,1})+cen1+custom_hash(vertex1);
+    vector st2 = rotate(st-cen2, rot2, {0,0,1})+cen2+custom_hash(vertex2);
+    vector st3 = rotate(st-cen3, rot3, {0,0,1})+cen3+custom_hash(vertex3);
+
+    vector f1, f2, f3, weights;
+    
+    if(is_normal){
+        // The variant of this meant to handle rotated normal maps relies on a function called SampleGrad, which samples a texture along a gradient.
+        // I'm not as of yet aware of how to implement this, as it requires derivatives, which Redshift does not support (3.5.13)
+        // the following colors are output simply so that it is clear that the shader is functioning.
+        f1 = vector(1,0.5,0), f2 = vector(0,1,0.5), f3 = vector(0.5,0,1);
+        weights = 0;
+    }
+    else{
+        // Fetch input
+        f1 = texture( texpath, st1[0], st1[1]);
+        f2 = texture( texpath, st2[0], st2[1]);
+        f3 = texture( texpath, st3[0], st3[1]);
+        // Use luminance as weight.
+        vector Lw = {0.299, 0.587, 0.114};
+        weights = vector(dot(f1,Lw),dot(f2,Lw),dot(f3,Lw));
+    }
+    weights = mix(1.0, weights, 0.6);
+    vector W = weights*pow(vector( w1, w2, w3), 7);
+    W /= (W.x+W.y+W.z);
+    if(rcurve!=0.5) W = Gain3(W, rcurve);
+
+    // Final combination using weighted values
+    colout = W.x * f1 + W.y * f2 + W.z * f3;
+    weightout = ProduceHexWeights(W, vertex1, vertex2, vertex3);
+}

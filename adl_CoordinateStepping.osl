@@ -1,0 +1,34 @@
+// Takes coordinates (most often UVs) and steps/pixelates them for use in noise or textures
+// adl_CoordinateStepping.osl, by Andrew Louda
+// Modified: 2024-01-21
+// Copyright 2024 Andrew Louda. This file is licensed under the Apache 2.0 license.
+// SPDX-License-Identifier: Apache-2.0
+
+// When used to effect a maxon noise (P_Offset to coord_offset), uniform scaling must be set to 10 with coordinates
+// in World space in the Maxon Noise, with all other scaling being done within this shader.
+// When used to effect a Texture (UV_Offset to offset), the UV coordinates being used for the texture must match the ones for the shader.
+
+shader adl_CoordinateStepping(
+    vector uvw = vector(u,v,0),
+    vector tile_uvw = 10
+        [[float slidermin = 1, float slidermax = 128]],
+    vector coordscale = 1,
+    float coordscale_uniform = 1
+        [[float slidermin = 0, float slidermax = 10]],
+    output vector P_Offset = 0,
+    output vector UV_Offset = 0,
+    output vector UV_Raw = 0,
+)
+{
+    vector stepped;
+    stepped.x = (floor(uvw.x*tile_uvw.x)+0.5)/tile_uvw.x;
+    stepped.y = (floor(uvw.y*tile_uvw.y)+0.5)/tile_uvw.y;
+    if(isconnected(uvw)) stepped.z = (floor(uvw.z*tile_uvw.z)+0.5)/tile_uvw.z;
+    
+    UV_Raw = stepped;
+    UV_Offset = ( stepped ) - uvw;
+    
+    stepped *= coordscale*coordscale_uniform;
+    P_Offset = ( stepped ) - P;
+    
+}

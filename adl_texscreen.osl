@@ -1,0 +1,96 @@
+// EARLY WORK-IN-PROGRESS DO NOT FILE REFERENCE. COPY THE CODE (you probably shouldn't be referencing OSL files anyways though)
+//
+// This is meant to mimic the pixels of an RGB display.
+// adl_texscreen.osl, by Andrew Louda
+// Modified: 2023-7-8
+// Copyright 2023 Andrew Louda. This file is licensed under the Apache 2.0 license.
+// SPDX-License-Identifier: Apache-2.0
+
+#define CIRCLERAD 1.4142
+
+float fract( float in){
+    return in-floor(in);
+}
+
+// Only allows each component color in each third of the U space
+vector subpixel( float ucoord, float vcoord, float utile, float vtile, vector inputcolor){
+    vector subcolor = inputcolor;
+
+    float shift = 0;
+    if(fract((floor(v*vtile)/2)) == 0){
+        shift = 0.5;
+    }
+
+    float scaled_u = fract((ucoord*utile)+shift);
+    if(scaled_u <=0.3333){
+        subcolor *= vector(1,0,0);
+    }
+    if(scaled_u <=0.6666 && scaled_u > 0.3333){
+        subcolor *= vector(0,1,0);
+    }
+    if(scaled_u <=1 && scaled_u > 0.6666){
+        subcolor *= vector(0,0,1);
+    }
+    return subcolor;
+}
+
+// Uses a subpixel mask based off of a texture
+vector subpixel_bytex( float ucoord, float vcoord, float utile, float vtile, vector inputcolor, string sub_path){
+    vector subcolor = inputcolor;
+
+    float shift = 0;
+    if(fract((floor(v*vtile)/2)) == 0){
+        shift = 0.5;
+    }
+
+    float scaled_u = fract((ucoord*utile)+shift);
+    float scaled_v = fract((vcoord*vtile));
+
+    subcolor *= texture( sub_path, scaled_u, scaled_v);
+    return subcolor;
+}
+
+// Creates the round circles in the center of each tile, or pills if they aspect ratio isn't 1:1
+vector roundpixel( float ucoord, float vcoord, float utile, float vtile, vector inputcolor, float circlesize){
+    float cellrange_u, cellrange_v;
+    if( utile != vtile){
+        if( utile < vtile){
+            cellrange_u = linearstep(1-utile/vtile,1, abs(fmod(u*utile,1)*2-1));
+            cellrange_v = abs(fmod(v*vtile,1)*2-1);
+        }
+        else{
+            cellrange_u = abs(fmod(u*utile,1)*2-1);
+            cellrange_v = linearstep(1-vtile/utile,1, abs(fmod(v*vtile,1)*2-1));
+        }
+    }
+    else{
+        cellrange_u = abs(fmod(u*utile,1)*2-1);
+        cellrange_v = abs(fmod(v*vtile,1)*2-1);
+    }
+    vector pixelcolor = inputcolor * mix(circlesize,1, 1-step(0.8, clamp( length( vector( cellrange_u, cellrange_v, 0)), 0, 1) ));
+    return pixelcolor;
+}
+
+shader texscreen_complex(
+    float tile_u = 10
+        [[float slidermin = 1, float slidermax = 2048]],
+    float tile_v = 10
+        [[float slidermin = 1, float slidermax = 2048]],
+    string texturepath = ""
+        [[string widget = "filename"]],
+    string subpixelmask_path = ""
+        [[string widget = "filename"]],
+    output color colout = 0,
+)
+{
+    float stepped_u = (floor(u*tile_u)+0.5)/tile_u;
+    float stepped_v = (floor(v*tile_v)+0.5)/tile_v;
+
+    colout = texture(texturepath, stepped_u, 1-stepped_v);
+
+    colout = subpixel( u, v, tile_u, tile_v, colout);
+
+    // colout = subpixel_bytex( u, v, tile_u, tile_v, colout, subpixelmask_path);
+
+    // colout = roundpixel( u, v, tile_u, tile_v, colout, 0.625);
+}

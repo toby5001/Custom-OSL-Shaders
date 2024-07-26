@@ -1,0 +1,55 @@
+// A truchet generator similar to one shown in https://thebookofshaders.com/10/, with added functionality and a simple tile selector
+// adl_uvTruchet.osl, by Andrew Louda
+// Modified: 2022-09-01
+// Copyright 2022 Andrew Louda. This file is licensed under the Apache 2.0 license.
+// SPDX-License-Identifier: Apache-2.0
+
+vector truchetPattern( vector _st, float _index){
+    vector in_st = _st;
+    float in_index = _index;
+    if(in_index > 0.75){
+        in_st = vector(1.0 - in_st[0], 1.0 - in_st[1], in_st[2]);
+    }
+    else if (in_index > 0.5){
+        in_st = vector(1.0 - in_st[0], in_st[1], in_st[2]);
+    }
+    else if (in_index > 0.25){
+        in_st = vector(in_st[0], 1.0 - in_st[1], in_st[2]);
+    }
+    return in_st;
+}
+
+float rerange(float val){
+        float outval = 1-(abs(val-0.5)*2);
+        return outval;
+}
+
+shader truchet(
+    float uvmul = 10 [[float slidermin = 1, float slidermax = 40]],
+    int    Type   = 0
+                [[ string widget= "mapper", 
+                   string help  = "Pick tile type from the list",
+                   int connectable = 0,
+                   string options="Two Quarter Circles:0|Single Quarter Circle:1|Classic Triangles:2|Diagonals:3" ]],
+    output float floatout = 0,
+)
+{
+    vector pdat = vector(u,v,0) * uvmul;
+    vector ipos = floor(pdat);
+    vector fpos = pdat - floor(pdat);
+    vector tile = truchetPattern( fpos, float(noise("cell", ipos )) );
+
+    //floatout = ( step(length(tile),0.6) - step(length(tile),0.4) ) + (step(length(vector(1,1,0)-tile),0.6) - step(length(vector(1,1,0)-tile),0.4) );
+    if (Type == 0)
+        floatout = rerange(linearstep(0.2929,0.7071,length(tile))) + rerange(linearstep(0.2929,0.7071,length(vector(1,1,0)-tile)));
+    else if (Type== 1)
+        floatout = rerange(linearstep(0, 1.41421, length(vector(tile.x,tile.y,0)) ));
+    else if (Type== 2){
+        if(tile.x+tile.y>1)
+            floatout = 1;
+        else
+            floatout = 0;    
+    }
+    else if (Type ==3 )
+        floatout = linearstep(tile.x-0.5,tile.x,tile.y)-linearstep(tile.x,tile.x+0.5,tile.y);
+}
