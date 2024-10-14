@@ -1,0 +1,328 @@
+// This is an adaptation of Jake Rice's 3D Winding Noise. Original license and description included below.
+// adl_windingNoise.osl, by Andrew Louda
+// Modified: 2024-10-13
+// Copyright 2024 Andrew Louda. This file is licensed under the Apache 2.0 license.
+// SPDX-License-Identifier: Apache-2.0
+
+/*
+In comparison to a standard perlin, simplex, or voronoi noise. The look of this noise can vary significantly more depending on what you set the parameters to.
+The default values are very close to the "intended" look of this noise, but you can get a pretty different look as well.
+*/
+
+#include <vector4.h>
+
+// Original WebGL shader from: https://www.shadertoy.com/view/MXXBR2
+// ----------------------------------------------------------------------------------
+// ----------------------------- BEGIN ORIGINAL COMMENT -----------------------------
+// The MIT License
+// Copyright © 2024 Jake Rice
+// Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+/*
+
+Notes:
+
+Very similar to Shard Noise from ENDESGA, and Cubism Noise from Brian Sharpe.
+the idea here is we compute the winding number to random triangles at each grid vertex and then weight them with smoothstep weights.
+The upside to this method is it relies only on 8 sampling points.
+By using winding numbers we also get the benefit of a known value range, in the base case it's always between -1 and 1.
+The downside is unlike Shard Noise from ENDESGA this method doesn't smooth out over a wide range since it has a 
+smaller vertex neighborhood.
+
+I've also included a "smooth" version, which lets you shrink the shard size to some small value, removing the shard look.
+
+*/
+// ----------------------------- END ORIGINAL COMMENT -----------------------------
+// ----------------------------------------------------------------------------------
+
+/* CONTROLS */
+
+#define CLAMP_NEGATIVE_VALUES 1
+
+// When the bias is positive, divide it by the maximum value, ensureing that it remains below 1.
+#define DIVIE_BY_MAXVAL 0
+
+// This switches to an incorrect version of the atan calculation which I initially implemented, although it it interesting in it's own right so I'm keeping it as an option for now.
+#define ATAN_ALTMODE 0
+
+// ENABLE_SEED - Switches the hash function to a higher dimension, allowing for a seed value to be passed through.
+#define ENABLE_SEED 1
+
+// UNIQUE OCTAVES - Combine with ENABLE_SEED to automatically remove the tunneling effect when observing octaves near position 0 in certain conditions (like low lacunarity).
+#define UNIQUE_OCTAVES 1
+
+/* END CONTROLS */ 
+
+
+//----------------------------------------------------------------------------------------
+//----------------------------------------------------------------------------------------
+// Fract functions
+
+float fract( float in){
+    return in-floor(in);
+}
+
+vector fract( vector in){
+    return in-floor(in);
+}
+
+vector4 fract( vector4 in){
+    return in-floor(in);
+}
+
+
+//----------------------------------------------------------------------------------------
+//----------------------------------------------------------------------------------------
+// Hash functions - values should be scaled before input to reduce artifacting
+// Method can be found in Hash Without Sine, by Dave Hoskins
+
+#define HSCALE 228.527
+
+//----------------------------------------------------------------------------------------
+// 1 out, 3 in
+float hash1(vector p3i)
+{
+    vector p3  = fract(p3i * HSCALE * .1031);
+    p3 += dot(p3, vector(p3.y,p3.x,p3.z)+33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+//----------------------------------------------------------------------------------------
+// 3 out, 3 in
+vector hash3(vector p3i)
+{
+    vector p3 = fract(p3i * HSCALE * vector(.1031, .1030, .0973));
+    p3 += dot(p3, vector(p3.y,p3.x,p3.z)+33.33);
+    return fract((vector(p3.x,p3.x,p3.y) + vector(p3.y,p3.x,p3.x))*vector(p3.z,p3.y,p3.x));
+}
+
+//----------------------------------------------------------------------------------------
+// 3 out, 4 in
+vector hash3(vector4 p4i)
+{
+    vector4 p4 = fract(p4i * HSCALE * vector4(.1031, .1030, .0973, .1099));
+    p4 += dot(p4, vector4(p4.w,p4.z,p4.x,p4.y)+33.33);
+    return fract((vector(p4.x,p4.y,p4.z)+vector(p4.y,p4.z,p4.w))*vector(p4.x,p4.z,p4.w));
+}
+
+
+
+
+
+vector rand_dir(vector p){
+    vector r = hash3(p);
+    return (r - .5) * 2.0;   
+}
+
+vector rand_dir(vector4 p){
+    vector r = hash3(p);
+    return (r - .5) * 2.0;   
+}
+
+
+float interp(float u){
+    return 1.0 - smoothstep(0.0, 1.0, abs(u));
+}
+
+vector interp3(vector u){
+    return vector(interp(u.x), interp(u.y), interp(u.z));
+}
+
+
+float winding_noise_3d(vector p, float seed, float shard_size, float shard_jitter_strength, int smooth_noise, int shard_value_processing){
+    vector noise_p = floor(p);
+    vector noise_f = fract(p);
+    
+    float out_val = 0.0;
+    
+    vector blend = interp3(noise_f);
+    
+    for(int i = 0; i <= 1; i++)
+    for(int j = 0; j <= 1; j++)
+    for(int k = 0; k <= 1; k++){
+
+        vector o = vector(i,j,k);
+        
+        vector g = noise_p  + o;
+        
+        
+        //shard direction
+        #if ENABLE_SEED
+            vector r = rand_dir(vector4(g.x,g.y,g.z,seed) );
+        #else
+            vector r = rand_dir(g);
+        #endif
+        #if ENABLE_SEED
+            vector r2 = rand_dir(vector4(r.x,r.y,r.z,seed) );
+        #else
+            vector r2 = rand_dir(r);
+        #endif
+
+        vector e0 = cross(r, r2);
+        vector e1 = cross(r, e0);
+
+        #if ENABLE_SEED
+            vector offset =  rand_dir(vector4(r.x,r.y,r.z,seed)) * hash1(g) * shard_jitter_strength * 1.0;
+        #else
+            vector offset =  rand_dir(r) * hash1(g) * shard_jitter_strength * 1.0;
+        #endif
+
+        vector v = o - noise_f + offset;
+        
+        //make our triangle
+        vector t0 = r + r2;
+        vector t1 = r + e0;
+        vector t2 = r + e1;
+
+        vector a = t0 * shard_size + v;
+        vector b = t1 * shard_size + v;
+        vector c = t2 * shard_size + v;
+        
+        float al = length(a);
+        float bl = length(b);
+        float cl = length(c);
+        
+        // matrix m = matrix( a.x,a.y,a.z,0.,
+        //                     b.x,b.y,b.z,0.,
+        //                     c.x,c.y,c.z,0.,
+        //                     0.0,0.0,0.0,1.);
+        // float det = determinant( m );
+        // manually calculate determinant
+        float det = a[0]*b[1]*c[2] + a[1]*b[2]*c[0] + a[2]*b[0]*c[1] - a[2]*b[1]*c[0] - a[1]*b[0]*c[2] - a[0]*b[2]*c[1];
+        
+        float div = al * bl * cl + dot(a,b) * cl + dot(b,c) * al + dot(c,a) * bl;
+        
+        //compute the winding number
+        #if ATAN_ALTMODE
+            float winding = atan(det/div) / M_PI;
+        #else
+            float winding = atan2(det,div) / M_PI;
+        #endif
+
+        float s = winding;
+        
+        if(smooth_noise) s = smoothstep(0.0, 1.0, abs(s) / (shard_size * shard_size))  * sign(s);
+        
+        #define s4 s*s*s*s
+        #define s32 s4*s4*s4*s4*s4*s4*s4*s4
+        #define s_pow s4*s4*s4*s4
+        // #define s_pow s4*s4
+
+        if(shard_value_processing == 1){
+            s = abs(s);
+        }
+        else if( shard_value_processing == 2 && sign(s) == -1 ){
+            s = abs(s);
+            s = s_pow;
+        }
+        else if( shard_value_processing == 3){
+            s = abs(s);
+            s = s_pow;
+        }
+        
+        //note that at larger neighborhoods this weighting scheme will need to change :) 
+        vector wv = abs(o-blend);
+
+        out_val += s * wv.x * wv.y * wv.z;
+    }    
+    
+    return out_val;
+}
+
+
+// A basic fbm function, with support for non-integer octaves
+float fbm_f_winding3d(vector coords, float seed, float foctaves, float lacunarity, float bias, float shard_size, float shard_jitter_strength, int shard_smooth, int shard_value_processing, ) {
+    // Initial values
+    vector pdat = coords;
+    float out_val = 0.0;
+    float inseed = seed;
+
+    int octavesf = int(floor(foctaves));
+    float octblend = fract(foctaves);
+
+    #if DIVIE_BY_MAXVAL
+        float maxval = 0;
+    #endif
+
+    // Loop of octaves
+    for(int i = 0; i < octavesf; i++){
+        #if UNIQUE_OCTAVES
+            inseed = seed + i;
+        #endif
+        #if DIVIE_BY_MAXVAL
+            maxval += pow(bias, float(i));
+        #endif
+        out_val += pow(bias, float(i)) * winding_noise_3d(pow(lacunarity, float(i)) * pdat, inseed, shard_size, shard_jitter_strength, shard_smooth, shard_value_processing);
+        #if CLAMP_NEGATIVE_VALUES
+        out_val = max(out_val,0.);
+        #endif
+    }
+
+    // Blend between octaves, allowing for smooth per-point octave variation
+    if(octblend != 0){
+        #if UNIQUE_OCTAVES
+            inseed = seed + octavesf;
+        #endif
+        #if DIVIE_BY_MAXVAL
+            maxval += pow(bias, octavesf)*octblend;
+        #endif
+        out_val +=( pow(bias, octavesf) * winding_noise_3d( pow(lacunarity, octavesf) * pdat, inseed, shard_size, shard_jitter_strength, shard_smooth, shard_value_processing) ) * octblend;
+    }
+    #if DIVIE_BY_MAXVAL
+        out_val = sign(bias) == -1 ? out_val : out_val/maxval;
+    #endif
+    return out_val;
+}
+
+
+shader windingNoise(
+    vector pos = P
+        [[ string label = "Position"]],
+    float seed = 123.
+        [[ string label = "Seed",
+        float slidermin = 0.0, float slidermax = 256.]],
+    float octaves = 5.0
+        [[ string label = "Octaves",
+        float slidermin = 0.0, float slidermax = 20.]],
+    float lacunarity = 2.1
+        [[ string label = "Lacunarity",
+        float slidermin = 0.0, float slidermax = 5.0]],
+    float bias = 0.65
+        [[ string label = "Bias",
+        float slidermin = -1.0, float slidermax = 1.0]],
+
+    float shard_size = 1.
+        [[ string label = "Shard Size",
+        string page = "Noise Parameters",
+        float slidermin = 0.0, float slidermax = 2.0]],
+    float shard_jitter_strength = 1.0
+        [[ string label = "Jitter Strength",
+        string page = "Noise Parameters",
+        float slidermin = 0.0, float slidermax = 1.0]],
+    int shard_smooth = 0
+        [[ string label = "Smooth Shards",
+        string page = "Noise Parameters",
+        string widget = "checkBox"]],
+    int shard_value_processing = 0
+        [[ string label = "Value Processing",
+        string page = "Noise Parameters",
+        string widget = "mapper", 
+        string options = "None:0|Absolute Value:1|Abs Negative Power Falloff:2|Abs Power Falloff:3" ]],
+
+    float uniform_scale = 1.
+        [[ string label = "Uniform Scale",
+        string page = "Coordinates",
+        float slidermin = 0., float slidermax = 10.]],
+    vector scale = 1.
+        [[ string label = "Scale",
+        string page = "Coordinates"]],
+    vector offset = 0.
+        [[ string label = "Offset",
+        string page = "Coordinates"]],
+    
+    output float value = 0.,
+){
+    vector pdat = (pos)*(1/scale)*(1/uniform_scale)*10+offset;
+
+    value = fbm_f_winding3d( pdat, seed, octaves, lacunarity, bias, shard_size, shard_jitter_strength, shard_smooth, shard_value_processing);
+}
