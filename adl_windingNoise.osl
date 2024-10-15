@@ -1,15 +1,26 @@
 // This is an adaptation of Jake Rice's 3D Winding Noise. Original license and description included below.
 // adl_windingNoise.osl, by Andrew Louda
-// Modified: 2024-10-13
+// Modified: 2024-10-14
 // Copyright 2024 Andrew Louda. This file is licensed under the Apache 2.0 license.
 // SPDX-License-Identifier: Apache-2.0
 
 /*
+NOTES:
+
 In comparison to a standard perlin, simplex, or voronoi noise. The look of this noise can vary significantly more depending on what you set the parameters to.
 The default values are very close to the "intended" look of this noise, but you can get a pretty different look as well.
-*/
 
-#include <vector4.h>
+Value key for the "Value Processing" parameter (For OSL implementations that don't support Menu parameters):
+0 : None
+    - Disables processing particular values in a noise octave
+1 : Absolute Value
+    - Takes the absolute value of a noise octave, before combining it.
+2 : Abs Negative Power Falloff
+    - Takes the absolute value of a noise octave, but creates a sharper falloff for values that were previously negative.
+3 : Abs Power Falloff -
+    - Takes the absolute value of a noise octave, applies a sharp falloff for all values.
+
+*/
 
 // Original WebGL shader from: https://www.shadertoy.com/view/MXXBR2
 // ----------------------------------------------------------------------------------
@@ -34,6 +45,8 @@ I've also included a "smooth" version, which lets you shrink the shard size to s
 */
 // ----------------------------- END ORIGINAL COMMENT -----------------------------
 // ----------------------------------------------------------------------------------
+
+#include <vector4.h>
 
 /* CONTROLS */
 
