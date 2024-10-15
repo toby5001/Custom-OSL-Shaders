@@ -4,8 +4,8 @@
 // Copyright 2022 Andrew Louda. This file is licensed under the Apache 2.0 license.
 // SPDX-License-Identifier: Apache-2.0
 
-// When using color in an original maxon noise, it appears to output a greyscale value, to which the colors are then applied. Since this code can't get between those processes, it is recommended to use a greyscale input in combination with a gradient map or color mix for identical behavior.
-// Depending on how OSL optimizes things when compiling, disabling either the float or vector output may see a slight performance gain
+// Note:
+// By default, this node operates on a single float input/output, but it can be switched to a color input/output by uncommenting the line below.
 // #define enable_color
 
 float fit(float valin, float InStart, float InEnd, float OutStart, float OutEnd){
