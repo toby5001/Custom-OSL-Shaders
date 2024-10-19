@@ -5,6 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /*
+
 NOTES:
 
 In comparison to a standard perlin, simplex, or voronoi noise. The look of this noise can vary significantly more depending on what you set the parameters to.
@@ -319,8 +320,8 @@ shader windingNoise(
     int shard_value_processing = 0
         [[ string label = "Value Processing",
         string page = "Noise Parameters",
-        string widget = "mapper", 
-        string options = "None:0|Absolute Value:1|Abs Negative Power Falloff:2|Abs Power Falloff:3" ]],
+        string widget = "popup", 
+        string options = "None|Absolute Value|Abs Negative Power Falloff|Abs Power Falloff" ]],
 
     float uniform_scale = 1.
         [[ string label = "Uniform Scale",
