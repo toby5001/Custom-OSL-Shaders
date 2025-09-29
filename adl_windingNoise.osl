@@ -1,6 +1,6 @@
 // This is an adaptation of Jake Rice's 3D Winding Noise. Original license and description included below.
 // adl_windingNoise.osl, by Andrew Louda
-// Modified: 2024-10-14
+// Modified: 2025-6-23
 // Copyright 2024 Andrew Louda. This file is licensed under the Apache 2.0 license.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -53,8 +53,8 @@ I've also included a "smooth" version, which lets you shrink the shard size to s
 
 #define CLAMP_NEGATIVE_VALUES 1
 
-// When the bias is positive, divide it by the maximum value, ensureing that it remains below 1.
-#define DIVIE_BY_MAXVAL 0
+// When the bias is positive, divide it by the maximum value, ensuring that it remains below 1.
+#define DIVIDE_BY_MAXVAL 0
 
 // This switches to an incorrect version of the atan calculation which I initially implemented, although it it interesting in it's own right so I'm keeping it as an option for now.
 #define ATAN_ALTMODE 0
@@ -254,7 +254,7 @@ float fbm_f_winding3d(vector coords, float seed, float foctaves, float lacunarit
     int octavesf = int(floor(foctaves));
     float octblend = fract(foctaves);
 
-    #if DIVIE_BY_MAXVAL
+    #if DIVIDE_BY_MAXVAL
         float maxval = 0;
     #endif
 
@@ -263,7 +263,7 @@ float fbm_f_winding3d(vector coords, float seed, float foctaves, float lacunarit
         #if UNIQUE_OCTAVES
             inseed = seed + i;
         #endif
-        #if DIVIE_BY_MAXVAL
+        #if DIVIDE_BY_MAXVAL
             maxval += pow(bias, float(i));
         #endif
         out_val += pow(bias, float(i)) * winding_noise_3d(pow(lacunarity, float(i)) * pdat, inseed, shard_size, shard_jitter_strength, shard_smooth, shard_value_processing);
@@ -277,12 +277,12 @@ float fbm_f_winding3d(vector coords, float seed, float foctaves, float lacunarit
         #if UNIQUE_OCTAVES
             inseed = seed + octavesf;
         #endif
-        #if DIVIE_BY_MAXVAL
+        #if DIVIDE_BY_MAXVAL
             maxval += pow(bias, octavesf)*octblend;
         #endif
         out_val +=( pow(bias, octavesf) * winding_noise_3d( pow(lacunarity, octavesf) * pdat, inseed, shard_size, shard_jitter_strength, shard_smooth, shard_value_processing) ) * octblend;
     }
-    #if DIVIE_BY_MAXVAL
+    #if DIVIDE_BY_MAXVAL
         out_val = sign(bias) == -1 ? out_val : out_val/maxval;
     #endif
     return out_val;
