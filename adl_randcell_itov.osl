@@ -1,15 +1,15 @@
-// Simple code which takes up to 3 integer inputs and outputs a color
+// Simple shader which takes up to 3 integer inputs and outputs a random color
 // adl_randcell_itov.osl, by Andrew Louda
-// Modified: 2024-02-05 - V1.0.0
+// Modified: 2025-06-23 - V1.1.0
 // Copyright 2023 Andrew Louda. This file is licensed under the Apache 2.0 license.
 // SPDX-License-Identifier: Apache-2.0
 
 shader adl_randcell_itov(
-int intin = 0 [[int slidermin = 0, int slidermax = 1000]],
-int seed = 0 [[int slidermin = 0, int slidermax = 1000]],
-int seed_secondary = 123 [[int slidermin = 0, int slidermax = 1000]],
+int seed_primary = 0 [[int slidermin = 0, int slidermax = 1000]],
+int seed_secondary = 0 [[int slidermin = 0, int slidermax = 1000]],
+int seed_tertiary = 123 [[int slidermin = 0, int slidermax = 1000]],
 output vector vecout = 0,
 )
 {
-    vecout = noise("cell", vector(intin, seed, seed_secondary));
+    vecout = noise("cell", vector(seed_primary, seed_secondary, seed_tertiary));
 }
